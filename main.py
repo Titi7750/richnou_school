@@ -27,14 +27,14 @@ sidebar = html.Div([
     html.Div('Nom de commune', className='mt-3'),
     dcc.Dropdown(
         id='city',
-        options=all_commune,
-        value=all_commune
+        options=[{'label': commune, 'value': commune} for commune in all_commune],
+        placeholder='Choisir une commune'
     ),
     html.Div('Nom de l\'établissement', className='mt-3'),
     dcc.Dropdown(
         id='uai',
-        options=all_etablissement,
-        value=all_etablissement
+        options=[{'label': etablissement, 'value': etablissement} for etablissement in all_etablissement],
+        placeholder='Choisir un établissement'
     )
 ])
 
@@ -52,16 +52,32 @@ content = html.Div([
     Input('city', 'value')
 )
 def update_map(uai, city):
-    map_dataframe = dataframe_merged[(dataframe_merged['Nom_etablissement'] == uai) & (dataframe_merged['Nom_commune'] == city)]
+    map_dataframe = dataframe_merged.copy()
+
+    if city:
+        map_dataframe = map_dataframe[map_dataframe['Nom_commune'] == city]
+
+    if uai:
+        map_dataframe = map_dataframe[map_dataframe['Nom_etablissement'] == uai]
+
     fig = px.scatter_mapbox(
         map_dataframe,
         lat='latitude',
         lon='longitude',
-        zoom=12,
-        height=600
-        # hover_data=['UAI', 'Adresse_1', 'Adresse_3']
+        zoom=10,
+        height=600,
+        hover_name='Nom_etablissement'
     )
     fig.update_layout(mapbox_style="open-street-map")
+
+    if not map_dataframe.empty:
+        fig.update_layout(
+            mapbox_center={
+                "lat": map_dataframe['latitude'].mean(),
+                "lon": map_dataframe['longitude'].mean()
+            }
+        )
+
     return fig
 
 app.layout = dbc.Container([
