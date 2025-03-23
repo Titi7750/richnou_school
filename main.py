@@ -5,24 +5,31 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 
+# Chargement des données
 annuaire_education_dataframe = pd.read_csv('data/fr-en-annuaire-education.csv', sep=';')
 indicateur_resultat_lycee_dataframe = pd.read_csv('data/fr-en-indicateurs-de-resultat-des-lycees-gt_v2.csv', sep=';')
 
+# Fusion et filtrage initial
 dataframe_merged = pd.merge(annuaire_education_dataframe, indicateur_resultat_lycee_dataframe, left_on='Identifiant_de_l_etablissement', right_on='UAI')
 dataframe_merged = dataframe_merged[dataframe_merged['Region'] == 'ILE-DE-FRANCE']
 dataframe_merged = dataframe_merged[dataframe_merged['Type_etablissement'] == 'Lycée']
 
+# Valeurs uniques pour dropdowns
+all_departement = sorted(dataframe_merged['Departement'].unique())
 all_etablissement = sorted(dataframe_merged['Nom_etablissement'].unique())
 all_commune = sorted(dataframe_merged['Nom_commune'].unique())
 
+# Initialisation de l'app
 app = dash.Dash(external_stylesheets=[dbc.themes.FLATLY])
+
+# Sidebar avec les filtres
 sidebar = html.Div([
-    html.H2('Filtres', className='text-white'),
+    html.H2('Filtres', className='text-white mt-3'),
     html.Div('Département'),
     dcc.Dropdown(
         id='department',
-        # options=,
-        # value=
+        options=[{'label': departement, 'value': departement} for departement in all_departement],
+        placeholder='Choisir un département'
     ),
     html.Div('Nom de commune', className='mt-3'),
     dcc.Dropdown(
@@ -30,7 +37,7 @@ sidebar = html.Div([
         options=[{'label': commune, 'value': commune} for commune in all_commune],
         placeholder='Choisir une commune'
     ),
-    html.Div('Nom de l\'établissement', className='mt-3'),
+    html.Div("Nom de l'établissement", className='mt-3'),
     dcc.Dropdown(
         id='uai',
         options=[{'label': etablissement, 'value': etablissement} for etablissement in all_etablissement],
@@ -38,6 +45,7 @@ sidebar = html.Div([
     )
 ])
 
+# Contenu principal avec les différents graphiques
 content = html.Div([
     dbc.Row([
         dcc.Graph(id='map'),
@@ -46,13 +54,18 @@ content = html.Div([
     ]),
 ])
 
+# Callback pour mise à jour de la carte
 @app.callback(
     Output('map', 'figure'),
+    Input('department', 'value'),
+    Input('city', 'value'),
     Input('uai', 'value'),
-    Input('city', 'value')
 )
-def update_map(uai, city):
+def update_map(department, city, uai):
     map_dataframe = dataframe_merged.copy()
+    
+    if department:
+        map_dataframe = map_dataframe[map_dataframe['Departement'] == department]
 
     if city:
         map_dataframe = map_dataframe[map_dataframe['Nom_commune'] == city]
@@ -80,6 +93,38 @@ def update_map(uai, city):
 
     return fig
 
+# Callback pour mise à jour des dropdowns
+@app.callback(
+    Output('city', 'options'),
+    Output('city', 'value'),
+    Output('uai', 'options'),
+    Output('uai', 'value'),
+    Input('department', 'value'),
+    Input('city', 'value')
+)
+def update_dropdowns(selected_dept, selected_city):
+    dataframe_dropdowns = dataframe_merged.copy()
+
+    if selected_dept:
+        dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Departement'] == selected_dept]
+
+    # Met à jour les communes selon le département
+    communes = sorted(dataframe_dropdowns['Nom_commune'].unique())
+    city_options = [{'label': commune, 'value': commune} for commune in communes]
+
+    # Vérifie si la ville actuelle est encore valide
+    updated_city = selected_city if selected_city in communes else None
+
+    if updated_city:
+        dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Nom_commune'] == updated_city]
+
+    # Met à jour les établissements selon les départements et les villes
+    etablissements = sorted(dataframe_dropdowns['Nom_etablissement'].unique())
+    uai_options = [{'label': etablissement, 'value': etablissement} for etablissement in etablissements]
+
+    return city_options, updated_city, uai_options, None
+
+# Layout final
 app.layout = dbc.Container([
     dbc.Row(
         [
@@ -90,5 +135,6 @@ app.layout = dbc.Container([
     ),
 ], fluid=True)
 
+# Lancement
 if __name__ == '__main__':
     app.run_server(debug=True)
