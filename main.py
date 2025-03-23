@@ -15,6 +15,7 @@ dataframe_merged = dataframe_merged[dataframe_merged['Region'] == 'ILE-DE-FRANCE
 dataframe_merged = dataframe_merged[dataframe_merged['Type_etablissement'] == 'Lycée']
 
 # Valeurs uniques pour dropdowns
+all_academie = sorted(dataframe_merged['Academie'].unique())
 all_departement = sorted(dataframe_merged['Departement'].unique())
 all_etablissement = sorted(dataframe_merged['Nom_etablissement'].unique())
 all_commune = sorted(dataframe_merged['Nom_commune'].unique())
@@ -25,7 +26,13 @@ app = dash.Dash(external_stylesheets=[dbc.themes.FLATLY])
 # Sidebar avec les filtres
 sidebar = html.Div([
     html.H2('Filtres', className='text-white mt-3'),
-    html.Div('Département'),
+    html.Div('Académie'),
+    dcc.Dropdown(
+        id='academie',
+        options=[{'label': academie, 'value': academie} for academie in all_academie],
+        placeholder='Choisir une académie'
+    ),
+    html.Div('Département', className='mt-3'),
     dcc.Dropdown(
         id='department',
         options=[{'label': departement, 'value': departement} for departement in all_departement],
@@ -57,12 +64,16 @@ content = html.Div([
 # Callback pour mise à jour de la carte
 @app.callback(
     Output('map', 'figure'),
+    Input('academie', 'value'),
     Input('department', 'value'),
     Input('city', 'value'),
     Input('uai', 'value'),
 )
-def update_map(department, city, uai):
+def update_map(academie, department, city, uai):
     map_dataframe = dataframe_merged.copy()
+
+    if academie:
+        map_dataframe = map_dataframe[map_dataframe['Academie'] == academie]
     
     if department:
         map_dataframe = map_dataframe[map_dataframe['Departement'] == department]
@@ -95,34 +106,43 @@ def update_map(department, city, uai):
 
 # Callback pour mise à jour des dropdowns
 @app.callback(
+    Output('department', 'options'),
+    Output('department', 'value'),
     Output('city', 'options'),
     Output('city', 'value'),
     Output('uai', 'options'),
     Output('uai', 'value'),
+    Input('academie', 'value'),
     Input('department', 'value'),
     Input('city', 'value')
 )
-def update_dropdowns(selected_dept, selected_city):
+def update_dropdowns(selected_academie, selected_dept, selected_city):
     dataframe_dropdowns = dataframe_merged.copy()
 
-    if selected_dept:
-        dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Departement'] == selected_dept]
+    if selected_academie:
+        dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Academie'] == selected_academie]
 
-    # Met à jour les communes selon le département
+    # Départements filtrés par académie
+    departements = sorted(dataframe_dropdowns['Departement'].unique())
+    dept_options = [{'label': departement, 'value': departement} for departement in departements]
+    updated_dept = selected_dept if selected_dept in departements else None
+
+    if updated_dept:
+        dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Departement'] == updated_dept]
+
+    # Communes filtrées par académie + département
     communes = sorted(dataframe_dropdowns['Nom_commune'].unique())
     city_options = [{'label': commune, 'value': commune} for commune in communes]
-
-    # Vérifie si la ville actuelle est encore valide
     updated_city = selected_city if selected_city in communes else None
 
     if updated_city:
         dataframe_dropdowns = dataframe_dropdowns[dataframe_dropdowns['Nom_commune'] == updated_city]
 
-    # Met à jour les établissements selon les départements et les villes
-    etablissements = sorted(dataframe_dropdowns['Nom_etablissement'].unique())
-    uai_options = [{'label': etablissement, 'value': etablissement} for etablissement in etablissements]
+    # Établissements filtrés
+    etabs = sorted(dataframe_dropdowns['Nom_etablissement'].unique())
+    uai_options = [{'label': etablissement, 'value': etablissement} for etablissement in etabs]
 
-    return city_options, updated_city, uai_options, None
+    return dept_options, updated_dept, city_options, updated_city, uai_options, None
 
 # Layout final
 app.layout = dbc.Container([
